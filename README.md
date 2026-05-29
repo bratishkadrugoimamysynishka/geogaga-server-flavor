@@ -21,19 +21,19 @@
 ### Пример структуры в конфигурации Xray JSON:
 ```json
 "routing": {
-  "domainStrategy": "AsIs",
+  "domainStrategy": "IPIfNonMatch",
   "rules": [
     {
       "type": "field",
       "outboundTag": "block",
-      "domain": ["geosite:GEOGAGA-BLOCK"],
-      "ip": ["geoip:GEOGAGA-BLOCK"]
+      "domain": ["geosite:geogaga-block"],
+      "ip": ["geoip:geogaga-block"]
     },
     {
       "type": "field",
       "outboundTag": "warp",
-      "domain": ["geosite:GEOGAGA-PROXY"],
-      "ip": ["geoip:GEOGAGA-PROXY"]
+      "domain": ["geosite:geogaga-proxy"],
+      "ip": ["geoip:geogaga-proxy"]
     },
     {
       "type": "field",
