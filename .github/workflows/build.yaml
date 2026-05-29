@@ -1,4 +1,4 @@
-name: Build GeoData Flavor 2
+name: Build "GeoGaga - Server Flavor"
 
 on:
   schedule:
