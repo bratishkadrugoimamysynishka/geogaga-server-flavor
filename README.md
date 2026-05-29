@@ -56,7 +56,7 @@
   * Из репозитория *hydraponique/roscomvpn-geosite*:
     * `torrent`, `private`, `category-ads` — торренты, приватные сети и рекламные домены.
   * Из репозитория *runetfreedom/russia-blocked-geosite*:
-    * `category-ads-all`, `geosite:win-spy` — расширенная реклама и телеметрия Windows.
+    * `category-ads-all`, `win-spy` — расширенная реклама и телеметрия Windows.
 
 ### 🔵 `geosite:GEOGAGA-PROXY`
 Список доменов для маскировки (например, через Cloudflare WARP).
