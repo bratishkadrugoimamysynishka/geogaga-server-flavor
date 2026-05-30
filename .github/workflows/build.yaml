@@ -66,4 +66,4 @@ jobs:
           git tag -d latest || true
           git push origin :refs/tags/latest || true
           sleep 2
-          gh release create latest geoip.dat geosite.dat *.sha256 --title "$(date +%Y%m%d)" --notes "Daily automated geo-data update (Flavor 2)"
+          gh release create latest geoip.dat geosite.dat *.sha256 --title "$(date +%Y%m%d)" --notes "GeoGaga - Server Flavor"
