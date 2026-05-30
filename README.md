@@ -1,4 +1,6 @@
-
+<p align="center">
+  <img src="banner.svg" alt="GeoGaga - Server Flavor Banner" width="100%">
+</p>
 
 # GeoGaga — Server Flavor
 
