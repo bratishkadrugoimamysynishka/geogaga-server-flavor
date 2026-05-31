@@ -1,10 +1,13 @@
-<table align="center">
-  <tr>
-    <td align="center">🔵 <a href="https://github.com/bratishkadrugoimamysynishka/geogaga-client-flavor">GeoGaga - Client Flavor</a></td>
-    <td align="center">🟢 <a href="https://github.com/bratishkadrugoimamysynishka/geogaga-server-flavor"><b>GeoGaga - Server Flavor</b></a></td>
-    <td align="center">🚀 Coming Soon..?</td>
-  </tr>
+<div align="center">
+
+<table width="100%">
+<tr>
+<td align="center"><a href="https://github.com/bratishkadrugoimamysynishka/geogaga-client-flavor">🔵 GeoGaga - Client Flavor</a></td>
+<td align="center"><a href="https://github.com/bratishkadrugoimamysynishka/geogaga-server-flavor"><b>🟢 Geogaga - Server Flavor</b></a></td>
+</tr>
 </table>
+
+</div>
 
 <p align="center">
   <img src="banner.svg" alt="GeoGaga - Server Flavor Banner" width="100%">
