@@ -2,8 +2,6 @@ name: Parse DAT files to LST
 
 on:
   workflow_dispatch: # Ручной запуск
-  schedule:
-    - cron: '0 6 * * *' # Автоматический запуск раз в день
 
 permissions:
   contents: write
