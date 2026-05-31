@@ -1,253 +1,152 @@
 import sys
-import os
-import requests
+import json
+import urllib.request
+import collections
 import ipaddress
-from grpc_tools import protoc
-
-proto_content = """
-syntax = "proto3";
-package v2ray.core.app.router;
-
-message CIDR {
-  bytes ip = 1;
-  uint32 prefix = 2;
-}
-message GeoIP {
-  string country_code = 1;
-  repeated CIDR cidr = 2;
-}
-message GeoIPList {
-  repeated GeoIP entry = 1;
-}
-
-message Domain {
-  enum Type {
-    Plain = 0;
-    Regex = 1;
-    Domain = 2;
-    Full = 3;
-  }
-  Type type = 1;
-  string value = 2;
-  message Attribute {
-    string key = 1;
-    oneof value {
-      bool bool_value = 2;
-      int64 int_value = 3;
-    }
-  }
-  repeated Attribute attribute = 3;
-}
-message SiteGroup {
-  string category = 1;
-  repeated Domain domain = 2;
-}
-message SiteList {
-  repeated SiteGroup entry = 1;
-}
-"""
-
-with open("router.proto", "w", encoding="utf-8") as f:
-    f.write(proto_content)
-
-protoc.main(('', '-I.', '--python_out=.', 'router.proto'))
-sys.path.append(os.getcwd())
 import router_pb2
 
-def download_file(url):
-    r = requests.get(url, timeout=30)
-    r.raise_for_status()
-    return r.content
+def optimize_domains(domains_list):
+    dom_map = {}
+    full_map = {}
+    plains = []
+    regexes = []
+    others = []
 
-def optimize_domain_list(domain_list):
-    domains = [d for d in domain_list if d.type == 2]
-    fulls = [d for d in domain_list if d.type == 3]
-    plains = [d for d in domain_list if d.type == 0]
-    regexes = [d for d in domain_list if d.type == 1]
-    
-    domains.sort(key=lambda x: len(x.value.lower().split('.')))
-    valid_domains = set()
-    optimized_domains = []
-    
-    for d in domains:
-        val = d.value.lower()
-        if val in valid_domains:
-            continue
-        parts = val.split('.')
-        is_redundant = False
-        for i in range(1, len(parts)):
-            parent = '.'.join(parts[i:])
-            if parent in valid_domains:
-                is_redundant = True
-                break
-        if not is_redundant:
-            valid_domains.add(val)
-            optimized_domains.append(d)
-            
-    valid_fulls = set()
-    optimized_fulls = []
-    for f in fulls:
-        val = f.value.lower()
-        if val in valid_fulls:
-            continue
-        parts = val.split('.')
-        is_covered = False
-        for i in range(len(parts)):
-            parent = '.'.join(parts[i:])
-            if parent in valid_domains:
-                is_covered = True
-                break
-        if not is_covered:
-            valid_fulls.add(val)
-            optimized_fulls.append(f)
-            
-    seen_plains = set()
-    optimized_plains = []
-    for p in plains:
-        if p.value not in seen_plains:
-            seen_plains.add(p.value)
-            optimized_plains.append(p)
-            
-    seen_regex = set()
-    optimized_regex = []
-    for r in regexes:
-        if r.value not in seen_regex:
-            seen_regex.add(r.value)
-            optimized_regex.append(r)
-            
-    return optimized_domains + optimized_fulls + optimized_plains + optimized_regex
+    # 1. Группируем домены по типам (Plain=0, Regex=1, Domain=2, Full=3)
+    for d in domains_list:
+        if d.type == 0: 
+            plains.append(d)
+        elif d.type == 1: 
+            regexes.append(d)
+        elif d.type == 2:
+            # Сохраняем объект целиком, чтобы не потерять router_pb2.Domain.Attribute
+            # При дубликатах отдаем приоритет объекту с бОльшим количеством атрибутов
+            if d.value not in dom_map or len(d.attribute) > len(dom_map[d.value].attribute):
+                dom_map[d.value] = d
+        elif d.type == 3:
+            if d.value not in full_map or len(d.attribute) > len(full_map[d.value].attribute):
+                full_map[d.value] = d
+        else:
+            others.append(d)
 
-def optimize_cidr_list(cidr_list):
-    v4_nets = []
-    v6_nets = []
-    for cidr in cidr_list:
+    final_doms = set()
+    # Сортируем Domain по длине для проверки родительских доменов
+    sorted_dom_keys = sorted(dom_map.keys(), key=len)
+    for d_val in sorted_dom_keys:
+        parts = d_val.split('.')
+        # Отбрасываем, если родительский домен уже в списке
+        is_subdomain = any('.'.join(parts[i:]) in final_doms for i in range(len(parts)))
+        # Отбрасываем, если домен покрывается правилом Plain (Keyword подстрокой)
+        has_keyword = any(p.value in d_val for p in plains)
+        
+        if not is_subdomain and not has_keyword:
+            final_doms.add(d_val)
+
+    final_fulls = set()
+    for f_val in full_map.keys():
+        parts = f_val.split('.')
+        # Отбрасываем Full, если он перекрывается обычным Domain или Plain
+        is_covered_by_domain = any('.'.join(parts[i:]) in final_doms for i in range(len(parts)))
+        has_keyword = any(p.value in f_val for p in plains)
+        
+        if not is_covered_by_domain and not has_keyword:
+            final_fulls.add(f_val)
+
+    # 2. Сборка оптимизированного списка оригинальных объектов
+    optimized = []
+    optimized.extend(plains)
+    optimized.extend(regexes)
+    for d_val in final_doms: 
+        optimized.append(dom_map[d_val])
+    for f_val in final_fulls: 
+        optimized.append(full_map[f_val])
+    optimized.extend(others)
+    
+    return optimized
+
+def optimize_ips(cidr_list):
+    ipv4_nets = []
+    ipv6_nets = []
+    for c in cidr_list:
         try:
-            ip_obj = ipaddress.ip_address(cidr.ip)
-            net = ipaddress.ip_network(f"{ip_obj}/{cidr.prefix}", strict=False)
-            if net.version == 4:
-                v4_nets.append(net)
-            else:
-                v6_nets.append(net)
+            # Извлекаем IP из packed bytes
+            addr = ipaddress.ip_address(c.ip)
+            net = ipaddress.ip_network(f"{addr}/{c.prefix}", strict=False)
+            if isinstance(net, ipaddress.IPv4Network): 
+                ipv4_nets.append(net)
+            else: 
+                ipv6_nets.append(net)
         except Exception:
-            continue
+            pass
             
-    collapsed = list(ipaddress.collapse_addresses(v4_nets)) + list(ipaddress.collapse_addresses(v6_nets))
-    
-    optimized_cidrs = []
-    for net in collapsed:
+    # collapse_addresses схлопывает пересечения, включения и дубли внутри v4 и v6 раздельно
+    opt_v4 = list(ipaddress.collapse_addresses(ipv4_nets))
+    opt_v6 = list(ipaddress.collapse_addresses(ipv6_nets))
+
+    optimized = []
+    for net in opt_v4 + opt_v6:
         c = router_pb2.CIDR()
         c.ip = net.network_address.packed
         c.prefix = net.prefixlen
-        optimized_cidrs.append(c)
-    return optimized_cidrs
+        optimized.append(c)
+    return optimized
 
-def main():
-    geogaga_sites = {"GEOGAGA-BLOCK": [], "GEOGAGA-PROXY": []}
-    geogaga_ips = {"GEOGAGA-BLOCK": [], "GEOGAGA-PROXY": []}
-    other_sites = {}
-    other_ips = {}
-
-    print("Парсинг ресурсов для Flavor 2...")
-
-    # --- GEOSITE СБОРКА ---
-    # Источник 1
-    url = "https://github.com/hydraponique/roscomvpn-geosite/raw/release/geosite.dat"
-    s_list = router_pb2.SiteList()
-    s_list.ParseFromString(download_file(url))
-    for entry in s_list.entry:
-        cat = entry.category.lower()
-        if cat in {"whitelist", "category-ru"}:
-            geogaga_sites["GEOGAGA-PROXY"].extend(entry.domain)
-        elif cat in {"torrent", "private", "category-ads"}:
-            geogaga_sites["GEOGAGA-BLOCK"].extend(entry.domain)
-
-    # Источник 2
-    url = "https://github.com/runetfreedom/russia-blocked-geosite/raw/release/geosite.dat"
-    s_list = router_pb2.SiteList()
-    s_list.ParseFromString(download_file(url))
-    for entry in s_list.entry:
-        cat = entry.category.lower()
-        if cat in {"category-ads-all", "geosite:win-spy"}:
-            geogaga_sites["GEOGAGA-BLOCK"].extend(entry.domain)
-
-    # Источник 3 (Перенос AS-IS с принудительным апперкейсом категорий)
-    url = "https://github.com/v2fly/domain-list-community/raw/release/dlc.dat"
-    s_list = router_pb2.SiteList()
-    s_list.ParseFromString(download_file(url))
-    for entry in s_list.entry:
-        cat_upper = entry.category.upper()
-        if cat_upper not in other_sites:
-            other_sites[cat_upper] = []
-        other_sites[cat_upper].extend(entry.domain)
-
-    # --- GEOIP СБОРКА ---
-    # Источник 1
-    url = "https://github.com/hydraponique/roscomvpn-geoip/raw/release/geoip.dat"
-    g_list = router_pb2.GeoIPList()
-    g_list.ParseFromString(download_file(url))
-    for entry in g_list.entry:
-        cat = entry.country_code.lower()
-        if cat in {"direct", "whitelist"}:
-            geogaga_ips["GEOGAGA-PROXY"].extend(entry.cidr)
-        elif cat == "private":
-            geogaga_ips["GEOGAGA-BLOCK"].extend(entry.cidr)
-
-    # Источник 2 (Перенос AS-IS с принудительным апперкейсом категорий)
-    url = "https://github.com/Loyalsoldier/v2ray-rules-dat/raw/release/geoip.dat"
-    g_list = router_pb2.GeoIPList()
-    g_list.ParseFromString(download_file(url))
-    for entry in g_list.entry:
-        cat_upper = entry.country_code.upper()
-        if cat_upper not in other_ips:
-            other_ips[cat_upper] = []
-        other_ips[cat_upper].extend(entry.cidr)
-
-    # --- ЗАПИСЬ И ОПТИМИЗАЦИЯ ФАЙЛОВ ---
-    final_geosite = router_pb2.SiteList()
+def process_dat(config, list_class, attr_name):
+    category_items = collections.defaultdict(list)
     
-    # Оптимизируем только geogaga-*
-    for cat, domains in geogaga_sites.items():
-        if domains:
-            entry = final_geosite.entry.add()
-            entry.category = cat.upper()
-            optimized = optimize_domain_list(domains)
-            for d in optimized:
-                entry.domain.add().CopyFrom(d)
-                
-    # Сторонние категории пишем as-is, но приводим название к верхнему регистру
-    for cat, domains in other_sites.items():
-        if domains:
-            entry = final_geosite.entry.add()
-            entry.category = cat
-            for d in domains:
-                entry.domain.add().CopyFrom(d)
-
-    with open("geosite.dat", "wb") as f:
-        f.write(final_geosite.SerializeToString())
-
-    final_geoip = router_pb2.GeoIPList()
-    
-    # Оптимизируем только geogaga-*
-    for cat, cidrs in geogaga_ips.items():
-        if cidrs:
-            entry = final_geoip.entry.add()
-            entry.country_code = cat.upper()
-            optimized = optimize_cidr_list(cidrs)
-            for c in optimized:
-                entry.cidr.add().CopyFrom(c)
-                
-    # Сторонние категории пишем as-is, но приводим название к верхнему регистру
-    for cat, cidrs in other_ips.items():
-        if cidrs:
-            entry = final_geoip.entry.add()
-            entry.country_code = cat
-            for c in cidrs:
-                entry.cidr.add().CopyFrom(c)
-
-    with open("geoip.dat", "wb") as f:
-        f.write(final_geoip.SerializeToString())
-
-    print("Flavor 2 успешно собран и оптимизирован.")
+    for source in config:
+        print(f"Downloading: {source['url']}")
+        req = urllib.request.Request(source['url'], headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req) as response:
+            data = response.read()
+            
+        parsed_list = list_class.FromString(data)
+        
+        for rule in source['rules']:
+            src_cats = [c.upper() for c in rule['src']]
+            dst_cat = rule['dst'].upper()
+            
+            for entry in parsed_list.entry:
+                current_cat = entry.country_code.upper()
+                if "*" in src_cats or current_cat in src_cats:
+                    target = current_cat if dst_cat == "*" else dst_cat
+                    items = getattr(entry, attr_name)
+                    category_items[target].extend(items)
+                    
+    out_list = list_class()
+    for cat, items in category_items.items():
+        entry = out_list.entry.add()
+        # Принудительный апперкейс для всех итоговых категорий
+        entry.country_code = cat.upper() 
+        target_list = getattr(entry, attr_name)
+        
+        if cat.upper().startswith("GEOGAGA-"):
+            optimized_items = optimize_domains(items) if attr_name == "domain" else optimize_ips(items)
+            target_list.extend(optimized_items)
+        else:
+            # Для сторонних категорий (когда правило src: "*", dst: "*") 
+            # удаляем только полные дубликаты байткода, чтобы не ломать чужую логику
+            seen = set()
+            for item in items:
+                s = item.SerializeToString()
+                if s not in seen:
+                    seen.add(s)
+                    target_list.append(item)
+                    
+    return out_list
 
 if __name__ == "__main__":
-    main()
+    with open(sys.argv[1], 'r') as f:
+        config = json.load(f)
+
+    if 'geosite' in config:
+        geosite = process_dat(config['geosite'], router_pb2.GeoSiteList, "domain")
+        with open("geosite.dat", "wb") as f: 
+            f.write(geosite.SerializeToString())
+        
+    if 'geoip' in config:
+        geoip = process_dat(config['geoip'], router_pb2.GeoIPList, "cidr")
+        with open("geoip.dat", "wb") as f: 
+            f.write(geoip.SerializeToString())
+        
+    print("Build completed successfully.")
