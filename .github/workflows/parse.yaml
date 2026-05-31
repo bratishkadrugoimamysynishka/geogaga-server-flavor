@@ -1,0 +1,58 @@
+name: Parse DAT files to LST
+
+on:
+  workflow_dispatch: # Ручной запуск
+  schedule:
+    - cron: '0 6 * * *' # Автоматический запуск раз в день
+
+permissions:
+  contents: write
+
+jobs:
+  parse-data:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Protoc & Dependencies
+        run: |
+          sudo apt-get update && sudo apt-get install -y protobuf-compiler
+          pip install protobuf
+
+      - name: Compile Protobuf Schema
+        run: protoc --python_out=. router.proto
+
+      - name: Run Parser Script
+        run: python parser.py
+
+      - name: Commit to Clean Test Branch
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # 1. Временно убираем только нужные папки результатов наружу
+          mkdir ../tmp_parsed
+          mv client-flavor-geosite/ client-flavor-geoip/ server-flavor-geosite/ server-flavor-geoip/ v2fly-geosite/ Loyalsoldier-geoip/ hydraponique-geosite/ hydraponique-geoip/ runetfreedom-geosite/ runetfreedom-geoip/ ../tmp_parsed/
+          
+          # 2. Создаем независимую ветку test
+          git checkout --orphan test
+          
+          # 3. Полностью вычищаем рабочую копию
+          git rm -rf .
+          
+          # 4. Возвращаем папки обратно
+          mv ../tmp_parsed/* .
+          
+          # 5. Жёсткое удаление мусора, если он случайно затесался при переносе
+          rm -rf __pycache__ router_pb2.py
+          
+          # 6. Фиксируем только чистый результат
+          git add .
+          git commit -m "Auto-parsed DAT files into LST (Clean Branch)" || echo "No changes to commit"
+          git push origin test --force
