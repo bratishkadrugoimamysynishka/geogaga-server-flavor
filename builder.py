@@ -3,6 +3,7 @@ import json
 import urllib.request
 import collections
 import ipaddress
+from concurrent.futures import ThreadPoolExecutor
 import router_pb2
 
 def optimize_domains(domains_list):
@@ -12,15 +13,13 @@ def optimize_domains(domains_list):
     regexes = []
     others = []
 
-    # 1. Группируем домены по типам (Plain=0, Regex=1, Domain=2, Full=3)
+    # 1. Быстрая группировка по типам
     for d in domains_list:
         if d.type == 0: 
             plains.append(d)
         elif d.type == 1: 
             regexes.append(d)
         elif d.type == 2:
-            # Сохраняем объект целиком, чтобы не потерять router_pb2.Domain.Attribute
-            # При дубликатах отдаем приоритет объекту с бОльшим количеством атрибутов
             if d.value not in dom_map or len(d.attribute) > len(dom_map[d.value].attribute):
                 dom_map[d.value] = d
         elif d.type == 3:
@@ -29,30 +28,53 @@ def optimize_domains(domains_list):
         else:
             others.append(d)
 
+    # Кэшируем значения plain-доменов для ускорения substring-поиска
+    plain_values = [p.value for p in plains]
+
     final_doms = set()
-    # Сортируем Domain по длине для проверки родительских доменов
+    # Сортируем от коротких доменов к длинным (чтобы родительские зоны обрабатывались первыми)
     sorted_dom_keys = sorted(dom_map.keys(), key=len)
+    
     for d_val in sorted_dom_keys:
         parts = d_val.split('.')
-        # Отбрасываем, если родительский домен уже в списке
-        is_subdomain = any('.'.join(parts[i:]) in final_doms for i in range(len(parts)))
-        # Отбрасываем, если домен покрывается правилом Plain (Keyword подстрокой)
-        has_keyword = any(p.value in d_val for p in plains)
-        
-        if not is_subdomain and not has_keyword:
-            final_doms.add(d_val)
+        # Оптимизация O(1) вместо O(N): проверяем существование родительского домена по Set
+        is_subdomain = False
+        for i in range(1, len(parts)):
+            parent = '.'.join(parts[i:])
+            if parent in final_doms:
+                is_subdomain = True
+                break
+                
+        if is_subdomain:
+            continue
+
+        # Быстрая проверка на вхождение keyword
+        if any(p_val in d_val for p_val in plain_values):
+            continue
+
+        final_doms.add(d_val)
 
     final_fulls = set()
     for f_val in full_map.keys():
         parts = f_val.split('.')
-        # Отбрасываем Full, если он перекрывается обычным Domain или Plain
-        is_covered_by_domain = any('.'.join(parts[i:]) in final_doms for i in range(len(parts)))
-        has_keyword = any(p.value in f_val for p in plains)
         
-        if not is_covered_by_domain and not has_keyword:
-            final_fulls.add(f_val)
+        # Проверка перекрытия обычным Domain через Set-lookup
+        is_covered_by_domain = False
+        for i in range(len(parts)):
+            parent = '.'.join(parts[i:])
+            if parent in final_doms:
+                is_covered_by_domain = True
+                break
+                
+        if is_covered_by_domain:
+            continue
 
-    # 2. Сборка оптимизированного списка оригинальных объектов
+        if any(p_val in f_val for p_val in plain_values):
+            continue
+
+        final_fulls.add(f_val)
+
+    # 2. Сборка оригинальных объектов
     optimized = []
     optimized.extend(plains)
     optimized.extend(regexes)
@@ -69,7 +91,6 @@ def optimize_ips(cidr_list):
     ipv6_nets = []
     for c in cidr_list:
         try:
-            # Извлекаем IP из packed bytes
             addr = ipaddress.ip_address(c.ip)
             net = ipaddress.ip_network(f"{addr}/{c.prefix}", strict=False)
             if isinstance(net, ipaddress.IPv4Network): 
@@ -79,7 +100,6 @@ def optimize_ips(cidr_list):
         except Exception:
             pass
             
-    # collapse_addresses схлопывает пересечения, включения и дубли внутри v4 и v6 раздельно
     opt_v4 = list(ipaddress.collapse_addresses(ipv4_nets))
     opt_v6 = list(ipaddress.collapse_addresses(ipv6_nets))
 
@@ -91,19 +111,32 @@ def optimize_ips(cidr_list):
         optimized.append(c)
     return optimized
 
+def download_and_parse(source, list_class):
+    """Вынесено в отдельную функцию для параллельного выполнения в потоках"""
+    print(f"Downloading: {source['url']}")
+    try:
+        req = urllib.request.Request(source['url'], headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req, timeout=30) as response:
+            data = response.read()
+        parsed_list = list_class.FromString(data)
+        return source, parsed_list
+    except Exception as e:
+        print(f"❌ Error downloading/parsing {source['url']}: {e}")
+        return source, None
+
 def process_dat(config, list_class, attr_name):
     category_items = collections.defaultdict(list)
     
-    for source in config:
-        print(f"Downloading: {source['url']}")
-        req = urllib.request.Request(source['url'], headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req) as response:
-            data = response.read()
-            
-        parsed_list = list_class.FromString(data)
+    # Смена парадигмы: качаем все апстримы параллельно (максимум 4 потока)
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        results = executor.map(lambda src: download_and_parse(src, list_class), config)
         
+    for source, parsed_list in results:
+        if parsed_list is None:
+            continue
+            
         for rule in source['rules']:
-            src_cats = [c.upper() for c in rule['src']]
+            src_cats = {c.upper() for c in rule['src']} # Set для моментального поиска O(1)
             dst_cat = rule['dst'].upper()
             
             for entry in parsed_list.entry:
@@ -116,7 +149,6 @@ def process_dat(config, list_class, attr_name):
     out_list = list_class()
     for cat, items in category_items.items():
         entry = out_list.entry.add()
-        # Принудительный апперкейс для всех итоговых категорий
         entry.country_code = cat.upper() 
         target_list = getattr(entry, attr_name)
         
@@ -124,8 +156,6 @@ def process_dat(config, list_class, attr_name):
             optimized_items = optimize_domains(items) if attr_name == "domain" else optimize_ips(items)
             target_list.extend(optimized_items)
         else:
-            # Для сторонних категорий (когда правило src: "*", dst: "*") 
-            # удаляем только полные дубликаты байткода, чтобы не ломать чужую логику
             seen = set()
             for item in items:
                 s = item.SerializeToString()
@@ -139,6 +169,7 @@ if __name__ == "__main__":
     with open(sys.argv[1], 'r') as f:
         config = json.load(f)
 
+    # Запуск geosite и geoip последовательно, но внутри каждого — полная многопоточность сети
     if 'geosite' in config:
         geosite = process_dat(config['geosite'], router_pb2.GeoSiteList, "domain")
         with open("geosite.dat", "wb") as f: 
