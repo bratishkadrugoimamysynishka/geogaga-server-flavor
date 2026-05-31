@@ -1,0 +1,34 @@
+=== SUMMARY: hydraponique-geosite ===
+Total categories: 23
+Total elements: 3107
+
+Total elements by data type:
+  domain: 2984
+  keyword: 105
+  regexp: 7
+  full: 11
+
+Categories Breakdown:
+- APPLE: 92 items (domain: 92)
+- CATEGORY-ADS: 2 items (domain: 2)
+- CATEGORY-GEOBLOCK-RU: 880 items (domain: 770, keyword: 105, regexp: 5)
+- CATEGORY-RU: 55 items (domain: 55)
+- EPICGAMES: 27 items (domain: 27)
+- ESCAPEFROMTARKOV: 4 items (domain: 4)
+- FACEIT: 2 items (domain: 2)
+- GITHUB: 28 items (domain: 27, regexp: 1)
+- GOOGLE-DEEPMIND: 41 items (domain: 41)
+- GOOGLE-PLAY: 29 items (domain: 29)
+- MICROSOFT: 66 items (domain: 66)
+- ORIGIN: 153 items (domain: 153)
+- PINTEREST: 50 items (domain: 50)
+- PRIVATE: 130 items (domain: 118, full: 11, regexp: 1)
+- RIOT: 54 items (domain: 54)
+- STEAM: 40 items (domain: 40)
+- TELEGRAM: 26 items (domain: 26)
+- TORRENT: 418 items (domain: 418)
+- TWITCH: 40 items (domain: 40)
+- TWITCH-ADS: 5 items (domain: 5)
+- WHITELIST: 465 items (domain: 465)
+- WIN-SPY: 323 items (domain: 323)
+- YOUTUBE: 177 items (domain: 177)

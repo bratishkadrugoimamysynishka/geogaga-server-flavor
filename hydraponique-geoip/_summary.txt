@@ -1,0 +1,12 @@
+=== SUMMARY: hydraponique-geoip ===
+Total categories: 3
+Total elements: 41703
+
+Total elements by data type:
+  IPv4: 41617
+  IPv6: 86
+
+Categories Breakdown:
+- DIRECT: 34976 items (IPv4: 34894, IPv6: 82)
+- PRIVATE: 17 items (IPv4: 13, IPv6: 4)
+- WHITELIST: 6710 items (IPv4: 6710)

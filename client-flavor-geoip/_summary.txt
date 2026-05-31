@@ -1,0 +1,11 @@
+=== SUMMARY: client-flavor-geoip ===
+Total categories: 2
+Total elements: 58529
+
+Total elements by data type:
+  IPv4: 53932
+  IPv6: 4597
+
+Categories Breakdown:
+- GEOGAGA-PROXY: 23889 items (IPv4: 19378, IPv6: 4511)
+- GEOGAGA-DIRECT: 34640 items (IPv4: 34554, IPv6: 86)

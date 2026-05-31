@@ -1,0 +1,12 @@
+domain:kino.pub
+domain:kinopub.online
+domain:kpdl.link
+domain:ahc.ovh
+domain:gfw.ovh
+domain:mos-gorsud.co
+domain:cdn-service.space
+domain:cdn2cdn.com
+domain:cdn2site.com
+domain:pushbr.com
+domain:smarttvcdn.online
+regexp:(\w+)-static-[0-9]+\.cdntogo\.net$

@@ -1,0 +1,13 @@
+=== SUMMARY: client-flavor-geosite ===
+Total categories: 3
+Total elements: 235646
+
+Total elements by data type:
+  regexp: 1
+  domain: 235634
+  full: 11
+
+Categories Breakdown:
+- GEOGAGA-DIRECT: 1433 items (regexp: 1, domain: 1421, full: 11)
+- GEOGAGA-BLOCK: 159448 items (domain: 159448)
+- GEOGAGA-PROXY: 74765 items (domain: 74765)

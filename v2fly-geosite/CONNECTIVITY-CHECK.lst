@@ -1,0 +1,17 @@
+domain:captive.apple.com
+domain:connectivitycheck.gstatic.com
+domain:cp.cloudflare.com
+domain:detectportal.firefox.com
+domain:ipv6check-http.steamserver.net
+domain:ipv6check-udp.steamserver.net
+domain:msftconnecttest.com
+domain:msftncsi.com
+domain:network-test.debian.org
+domain:networkcheck.kde.org
+domain:test.steampowered.com
+full:connect.rom.miui.com
+full:connectivity-check.ubuntu.com
+full:connectivitycheck.platform.hicloud.com
+full:connectivitycheck.platform.hihonorcloud.com
+full:ping.archlinux.org
+full:redirect.archlinux.org
