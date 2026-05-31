@@ -29,7 +29,7 @@ jobs:
         run: protoc --python_out=. router.proto
 
       - name: Run Builder
-        run: python build.py config.json
+        run: python builder.py config.json
 
       - name: Generate SHA256 Hashes
         run: |
