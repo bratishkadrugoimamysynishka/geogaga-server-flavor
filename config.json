@@ -1,0 +1,38 @@
+{
+  "geosite": [
+    {
+      "url": "https://github.com/hydraponique/roscomvpn-geosite/raw/release/geosite.dat",
+      "rules": [
+        {"src": ["whitelist", "category-ru"], "dst": "GEOGAGA-PROXY"},
+        {"src": ["torrent", "private", "category-ads"], "dst": "GEOGAGA-BLOCK"}
+      ]
+    },
+    {
+      "url": "https://github.com/runetfreedom/russia-blocked-geosite/raw/release/geosite.dat",
+      "rules": [
+        {"src": ["category-ads-all", "geosite:win-spy"], "dst": "GEOGAGA-BLOCK"}
+      ]
+    },
+    {
+      "url": "https://github.com/v2fly/domain-list-community/raw/release/dlc.dat",
+      "rules": [
+        {"src": ["*"], "dst": "*"}
+      ]
+    }
+  ],
+  "geoip": [
+    {
+      "url": "https://github.com/hydraponique/roscomvpn-geoip/raw/release/geoip.dat",
+      "rules": [
+        {"src": ["direct", "whitelist"], "dst": "GEOGAGA-PROXY"},
+        {"src": ["private"], "dst": "GEOGAGA-BLOCK"}
+      ]
+    },
+    {
+      "url": "https://github.com/Loyalsoldier/v2ray-rules-dat/raw/release/geoip.dat",
+      "rules": [
+        {"src": ["*"], "dst": "*"}
+      ]
+    }
+  ]
+}
