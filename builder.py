@@ -111,7 +111,7 @@ def optimize_ips(cidr_list):
         optimized.append(c)
     return optimized
 
-def parse_json_cdn_source(data, allowed_cats_set):
+def parse_json_source_geoip(data, allowed_cats_set):
     """
     Разбирает JSON структуру базы CDN, фильтрует провайдеров (регистронезависимо)
     и резолвит их автономии через RIPE Stat API.
@@ -208,7 +208,7 @@ def process_dat(config, list_class, attr_name):
                 src_cats = {c.upper() for c in rule['src']}
                 dst_cat = rule['dst'].upper()
                 
-                fetched_cidrs = parse_json_cdn_source(parsed_data, src_cats)
+                fetched_cidrs = parse_json_source_geoip(parsed_data, src_cats)
                 category_items[dst_cat].extend(fetched_cidrs)
                 print(f"[BUILDER] Интегрировано {len(fetched_cidrs)} IP префиксов в категорию {dst_cat} из JSON")
         
