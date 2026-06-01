@@ -40,10 +40,21 @@ jobs:
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git checkout -B release
+          
+          # Создаем временную ветку без истории коммитов
+          git checkout --orphan tmp-release
+          
+          # Очищаем индекс Git (файлы физически останутся на диске, но не будут отслеживаться)
+          git rm --cached -r .
+          
+          # Индексируем исключительно готовые артефакты
           git add *.dat *.sha256
+          
+          # Делаем чистый коммит, где будут только файлы .dat и .sha256
           git commit -m "Auto-update GeoData" || echo "No changes to commit"
-          git push origin release --force
+          
+          # Пушим локальную ветку tmp-release напрямую в удаленный release
+          git push origin tmp-release:release --force
 
       - name: Delete old latest tag/release
         env:
