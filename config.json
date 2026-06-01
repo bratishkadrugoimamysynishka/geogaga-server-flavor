@@ -8,13 +8,14 @@
       ]
     },
     {
-      "url": "https://github.com/runetfreedom/russia-blocked-geosite/raw/release/geosite.dat",
+      "url": "https://github.com/runetfreedom/russia-v2ray-rules-dat/raw/release/geosite.dat",
       "rules": [
-        {"src": ["category-ads-all", "geosite:win-spy"], "dst": "GEOGAGA-BLOCK"}
+        {"src": ["category-ads-all", "geosite:win-spy"], "dst": "GEOGAGA-BLOCK"},
+        {"src": ["ru-available-only-inside"], "dst": "GEOGAGA-PROXY"}
       ]
     },
     {
-      "url": "https://github.com/v2fly/domain-list-community/raw/release/dlc.dat",
+      "url": "https://github.com/Loyalsoldier/v2ray-rules-dat/raw/release/geosite.dat",
       "rules": [
         {"src": ["*"], "dst": "*"}
       ]
@@ -26,6 +27,12 @@
       "rules": [
         {"src": ["direct", "whitelist"], "dst": "GEOGAGA-PROXY"},
         {"src": ["private"], "dst": "GEOGAGA-BLOCK"}
+      ]
+    },
+    {
+      "url": "https://github.com/runetfreedom/russia-v2ray-rules-dat/raw/release/geoip.dat",
+      "rules": [
+        {"src": ["ru-whitelist"], "dst": "GEOGAGA-PROXY"}
       ]
     },
     {
