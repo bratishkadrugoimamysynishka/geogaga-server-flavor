@@ -113,7 +113,7 @@ def optimize_ips(cidr_list):
 
 def parse_json_source_geoip(data, allowed_cats_set):
     """
-    Разбирает JSON структуру базы CDN, фильтрует провайдеров (регистронезависимо)
+    Разбирает JSON структуру базы CDN, фильтрует провайдеров (строго в верхнем регистре)
     и резолвит их автономии через RIPE Stat API.
     """
     all_asns = set()
@@ -121,13 +121,11 @@ def parse_json_source_geoip(data, allowed_cats_set):
 
     for provider, info in data.items():
         if provider.upper() in allowed_cats_set:
-            # Сбор прямых подсетей из файла
             cidrs = info.get("cidrs", []) or info.get("ips", []) or []
             for c in cidrs:
                 if isinstance(c, str) and '/' in c:
                     all_cidrs.add(c.strip())
 
-            # Сбор номеров автономных систем
             asns = info.get("asns", []) or []
             for asn in asns:
                 if isinstance(asn, str):
@@ -151,7 +149,7 @@ def parse_json_source_geoip(data, allowed_cats_set):
         return prefixes
 
     if all_asns:
-        print(f"[JSON] Найдено {len(all_asns)} ASN для обработки. Резолв через RIPE...")
+        print(f"[JSON-IP] Найдено {len(all_asns)} ASN для обработки. Резолв через RIPE...")
         with ThreadPoolExecutor(max_workers=15) as executor:
             for chunk in executor.map(fetch_asn, all_asns):
                 all_cidrs.update(chunk)
@@ -169,15 +167,68 @@ def parse_json_source_geoip(data, allowed_cats_set):
 
     return proto_cidrs
 
+def parse_json_source_geosite(data, allowed_cats_set):
+    """
+    Разбирает JSON структуру для Geosite. Категории приводятся к верхнему регистру.
+    Поддерживает плоские списки строк с префиксами и объекты со списками по типам доменов.
+    """
+    proto_domains = []
+    
+    # Сопоставление строковых представлений с типами Protobuf
+    type_mapping = {
+        "plain": router_pb2.Domain.Plain,
+        "keyword": router_pb2.Domain.Plain,
+        "regex": router_pb2.Domain.Regex,
+        "domain": router_pb2.Domain.Domain,
+        "full": router_pb2.Domain.Full
+    }
+
+    for category, content in data.items():
+        if category.upper() not in allowed_cats_set:
+            continue
+            
+        # Вариант 1: Плоский список строк ["domain:google.com", "apple.com"]
+        if isinstance(content, list):
+            for item in content:
+                if not isinstance(item, str):
+                    continue
+                
+                d_type = router_pb2.Domain.Domain  # Тип по умолчанию, если префикс отсутствует
+                d_value = item.strip()
+                
+                if ":" in d_value:
+                    prefix, value = d_value.split(":", 1)
+                    if prefix.lower() in type_mapping:
+                        d_type = type_mapping[prefix.lower()]
+                        d_value = value.strip()
+                
+                if d_value:
+                    d_proto = router_pb2.Domain()
+                    d_proto.type = d_type
+                    d_proto.value = d_value
+                    proto_domains.append(d_proto)
+                    
+        # Вариант 2: Объект со списками по типам {"domain": ["google.com"], "regex": [".*"]}
+        elif isinstance(content, dict):
+            for t_key, v_list in content.items():
+                if t_key.lower() in type_mapping and isinstance(v_list, list):
+                    d_type = type_mapping[t_key.lower()]
+                    for item in v_list:
+                        if isinstance(item, str) and item.strip():
+                            d_proto = router_pb2.Domain()
+                            d_proto.type = d_type
+                            d_proto.value = item.strip()
+                            proto_domains.append(d_proto)
+                            
+    return proto_domains
+
 def download_and_parse(source, list_class):
-    """Вынесено в отдельную функцию для параллельного выполнения в потоках"""
     print(f"Downloading: {source['url']}")
     try:
         req = urllib.request.Request(source['url'], headers={'User-Agent': 'Mozilla/5.0'})
         with urllib.request.urlopen(req, timeout=30) as response:
             data = response.read()
         
-        # Динамическое определение типа контента по расширению
         if source['url'].lower().endswith('.json'):
             return source, json.loads(data.decode('utf-8'))
         else:
@@ -190,7 +241,6 @@ def download_and_parse(source, list_class):
 def process_dat(config, list_class, attr_name):
     category_items = collections.defaultdict(list)
     
-    # Качаем все апстримы параллельно (включая JSON-файлы)
     with ThreadPoolExecutor(max_workers=4) as executor:
         results = executor.map(lambda src: download_and_parse(src, list_class), config)
         
@@ -198,24 +248,23 @@ def process_dat(config, list_class, attr_name):
         if parsed_data is None:
             continue
             
-        # Сценарий А: Обработка JSON-источника IP адресов
         if source['url'].lower().endswith('.json'):
-            if attr_name != "cidr":
-                # Пропускаем JSON-источники IP при сборке доменов (geosite)
-                continue
-                
             for rule in source['rules']:
                 src_cats = {c.upper() for c in rule['src']}
                 dst_cat = rule['dst'].upper()
                 
-                fetched_cidrs = parse_json_source_geoip(parsed_data, src_cats)
-                category_items[dst_cat].extend(fetched_cidrs)
-                print(f"[BUILDER] Интегрировано {len(fetched_cidrs)} IP префиксов в категорию {dst_cat} из JSON")
+                if attr_name == "cidr":
+                    fetched_cidrs = parse_json_source_geoip(parsed_data, src_cats)
+                    category_items[dst_cat].extend(fetched_cidrs)
+                    print(f"[BUILDER] Интегрировано {len(fetched_cidrs)} IP префиксов в категорию {dst_cat} из JSON")
+                elif attr_name == "domain":
+                    fetched_domains = parse_json_source_geosite(parsed_data, src_cats)
+                    category_items[dst_cat].extend(fetched_domains)
+                    print(f"[BUILDER] Интегрировано {len(fetched_domains)} доменов в категорию {dst_cat} из JSON")
         
-        # Сценарий Б: Стандартная обработка бинарного .dat файла
         else:
             for rule in source['rules']:
-                src_cats = {c.upper() for c in rule['src']} # Set для моментального поиска O(1)
+                src_cats = {c.upper() for c in rule['src']}
                 dst_cat = rule['dst'].upper()
                 
                 for entry in parsed_data.entry:
@@ -252,7 +301,6 @@ if __name__ == "__main__":
     with open(sys.argv[1], 'r') as f:
         config = json.load(f)
 
-    # Запуск geosite и geoip последовательно, но внутри каждого — полная многопоточность сети
     if 'geosite' in config:
         geosite = process_dat(config['geosite'], router_pb2.GeoSiteList, "domain")
         with open("geosite.dat", "wb") as f: 
