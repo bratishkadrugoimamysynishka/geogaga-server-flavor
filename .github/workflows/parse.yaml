@@ -1,4 +1,4 @@
-name: Parse DAT files to LST
+name: Parse to LST
 
 on:
   workflow_dispatch: # Ручной запуск
@@ -29,28 +29,10 @@ jobs:
       - name: Run Parser Script
         run: python parser.py
 
-      - name: Commit to Clean Test Branch
-        run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          
-          # 1. Временно убираем только нужные папки результатов наружу
-          mkdir ../tmp_parsed
-          mv * ../tmp_parsed/
-          
-          # 2. Создаем независимую ветку test
-          git checkout --orphan test
-          
-          # 3. Полностью вычищаем рабочую копию
-          git rm -rf .
-          
-          # 4. Возвращаем папки обратно
-          mv ../tmp_parsed/* .
-          
-          # 5. Жёсткое удаление мусора, если он случайно затесался при переносе
-          rm -rf __pycache__ router_pb2.py
-          
-          # 6. Фиксируем только чистый результат
-          git add .
-          git commit -m "Auto-parsed DAT files into LST (Clean Branch)" || echo "No changes to commit"
-          git push origin test --force
+      - name: Deploy Clean Results to Test Branch
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          branch: lists          # Ветка назначения для результатов
+          folder: parser-tmp        # Экшен возьмет ТОЛЬКО файлы из этой папки и положит в корень ветки test
+          clean: true           # Полностью сотрет старый мусор на ветке test перед коммитом
+          single-commit: true   # Держит историю ветки test чистой (всегда 1 коммит с актуальным результатом)
