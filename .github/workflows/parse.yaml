@@ -1,7 +1,9 @@
 name: Parse to LST
 
 on:
-  workflow_dispatch: # Ручной запуск
+  schedule:
+    - cron: '55 2 * * *'
+  workflow_dispatch:
 
 permissions:
   contents: write
