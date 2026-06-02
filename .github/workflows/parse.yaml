@@ -2,7 +2,7 @@ name: Parse to LST
 
 on:
   schedule:
-    - cron: '55 2 * * *'
+    - cron: '30 2 * * *'
   workflow_dispatch:
 
 permissions:
