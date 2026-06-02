@@ -6,16 +6,15 @@ from concurrent.futures import ThreadPoolExecutor
 import router_pb2
 
 SOURCES = {
-    "client-flavor-geosite": "https://github.com/bratishkadrugoimamysynishka/geogaga-client-flavor/raw/release/geosite.dat",
-    "client-flavor-geoip": "https://github.com/bratishkadrugoimamysynishka/geogaga-client-flavor/raw/release/geoip.dat",
-    "server-flavor-geosite": "https://github.com/bratishkadrugoimamysynishka/geogaga-server-flavor/raw/release/geosite.dat",
-    "server-flavor-geoip": "https://github.com/bratishkadrugoimamysynishka/geogaga-server-flavor/raw/release/geoip.dat",
-    "v2fly-geosite": "https://github.com/v2fly/domain-list-community/raw/release/dlc.dat",
+    "Server-Flavor-geosite": "https://github.com/bratishkadrugoimamysynishka/geogaga-server-flavor/raw/release/geosite.dat",
+    "Server-Flavor-geoip": "https://github.com/bratishkadrugoimamysynishka/geogaga-server-flavor/raw/release/geoip.dat",
+    "Loyalsoldier-geosite": "https://github.com/Loyalsoldier/v2ray-rules-dat/raw/release/geosite.dat",
     "Loyalsoldier-geoip": "https://github.com/Loyalsoldier/v2ray-rules-dat/raw/release/geoip.dat",
-    "hydraponique-geosite": "https://github.com/hydraponique/roscomvpn-geosite/raw/release/geosite.dat",
-    "hydraponique-geoip": "https://github.com/hydraponique/roscomvpn-geoip/raw/release/geoip.dat",
-    "runetfreedom-geosite": "https://github.com/runetfreedom/russia-blocked-geosite/raw/release/geosite.dat",
-    "runetfreedom-geoip": "https://github.com/runetfreedom/russia-blocked-geoip/raw/release/geoip.dat"
+    "roscomvpn-geosite": "https://github.com/hydraponique/roscomvpn-geosite/raw/release/geosite.dat",
+    "roscomvpn-geoip": "https://github.com/hydraponique/roscomvpn-geoip/raw/release/geoip.dat",
+    "runetfreedom-geosite": "https://github.com/runetfreedom/russia-v2ray-rules-dat/raw/release/geosite.dat",
+    "runetfreedom-geoip": "https://github.com/runetfreedom/russia-v2ray-rules-dat/raw/release/geoip.dat",
+    "b4-geoip": "https://github.com/DanielLavrushin/b4geoip/releases/latest/download/geoip.dat"
 }
 
 def get_domain_type_str(d_type):
