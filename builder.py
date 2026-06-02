@@ -111,6 +111,33 @@ def optimize_ips(cidr_list):
         optimized.append(c)
     return optimized
 
+def fetch_asn_prefixes(all_asns):
+    """
+    Вспомогательная функция для многопоточного резолва префиксов ASN через RIPE Stat API.
+    """
+    def fetch_asn(asn):
+        prefixes = []
+        asn_url = f"https://stat.ripe.net/data/announced-prefixes/data.json?resource=AS{asn}"
+        try:
+            req = urllib.request.Request(asn_url, headers={'User-Agent': 'Mozilla/5.0'})
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                res_data = json.loads(resp.read().decode('utf-8'))
+                for item in res_data.get("data", {}).get("prefixes", []):
+                    p = item.get("prefix")
+                    if p:
+                        prefixes.append(p)
+        except Exception as e:
+            print(f"⚠️ Warning fetching AS{asn}: {e}")
+        return prefixes
+
+    all_cidrs = set()
+    if all_asns:
+        print(f"[ASN-RESOLVER] Найдено {len(all_asns)} ASN для обработки. Резолв через RIPE...")
+        with ThreadPoolExecutor(max_workers=15) as executor:
+            for chunk in executor.map(fetch_asn, all_asns):
+                all_cidrs.update(chunk)
+    return all_cidrs
+
 def parse_json_source_geoip(data, allowed_cats_set):
     """
     Разбирает JSON структуру базы CDN, фильтрует провайдеров (строго в верхнем регистре)
@@ -133,26 +160,8 @@ def parse_json_source_geoip(data, allowed_cats_set):
                     if asn_digits:
                         all_asns.add(asn_digits)
 
-    def fetch_asn(asn):
-        prefixes = []
-        asn_url = f"https://stat.ripe.net/data/announced-prefixes/data.json?resource=AS{asn}"
-        try:
-            req = urllib.request.Request(asn_url, headers={'User-Agent': 'Mozilla/5.0'})
-            with urllib.request.urlopen(req, timeout=15) as resp:
-                res_data = json.loads(resp.read().decode('utf-8'))
-                for item in res_data.get("data", {}).get("prefixes", []):
-                    p = item.get("prefix")
-                    if p:
-                        prefixes.append(p)
-        except Exception as e:
-            print(f"⚠️ Warning fetching AS{asn}: {e}")
-        return prefixes
-
     if all_asns:
-        print(f"[JSON-IP] Найдено {len(all_asns)} ASN для обработки. Резолв через RIPE...")
-        with ThreadPoolExecutor(max_workers=15) as executor:
-            for chunk in executor.map(fetch_asn, all_asns):
-                all_cidrs.update(chunk)
+        all_cidrs.update(fetch_asn_prefixes(all_asns))
 
     proto_cidrs = []
     for c_str in all_cidrs:
@@ -222,6 +231,86 @@ def parse_json_source_geosite(data, allowed_cats_set):
                             
     return proto_domains
 
+def parse_lst_source_geoip(data_str):
+    """
+    Разбирает плоский .lst/.txt файл для GeoIP с поддержкой комментариев и ASN.
+    """
+    all_cidrs = set()
+    all_asns = set()
+
+    for line in data_str.splitlines():
+        line = line.split('#')[0].strip()
+        if not line:
+            continue
+
+        # Проверка на ASN (например, AS12345, as12345 или просто численный ID)
+        if line.upper().startswith("AS") or line.isdigit():
+            asn_digits = "".join(filter(str.isdigit, line))
+            if asn_digits:
+                all_asns.add(asn_digits)
+        else:
+            # Обработка IP / CIDR
+            if '/' not in line:
+                try:
+                    addr = ipaddress.ip_address(line)
+                    prefix = 32 if addr.version == 4 else 128
+                    all_cidrs.add(f"{addr}/{prefix}")
+                except ValueError:
+                    continue
+            else:
+                all_cidrs.add(line)
+
+    if all_asns:
+        all_cidrs.update(fetch_asn_prefixes(all_asns))
+
+    proto_cidrs = []
+    for c_str in all_cidrs:
+        try:
+            net = ipaddress.ip_network(c_str, strict=False)
+            cidr_proto = router_pb2.CIDR()
+            cidr_proto.ip = net.network_address.packed
+            cidr_proto.prefix = net.prefixlen
+            proto_cidrs.append(cidr_proto)
+        except Exception:
+            continue
+            
+    return proto_cidrs
+
+def parse_lst_source_geosite(data_str):
+    """
+    Разбирает плоский .lst/.txt файл для Geosite с поддержкой префиксов и комментариев.
+    """
+    proto_domains = []
+    type_mapping = {
+        "plain": router_pb2.Domain.Plain,
+        "keyword": router_pb2.Domain.Plain,
+        "regex": router_pb2.Domain.Regex,
+        "domain": router_pb2.Domain.Domain,
+        "full": router_pb2.Domain.Full
+    }
+
+    for line in data_str.splitlines():
+        line = line.split('#')[0].strip()
+        if not line:
+            continue
+
+        d_type = router_pb2.Domain.Domain
+        d_value = line
+
+        if ":" in d_value:
+            prefix, value = d_value.split(":", 1)
+            if prefix.lower() in type_mapping:
+                d_type = type_mapping[prefix.lower()]
+                d_value = value.strip()
+
+        if d_value:
+            d_proto = router_pb2.Domain()
+            d_proto.type = d_type
+            d_proto.value = d_value
+            proto_domains.append(d_proto)
+
+    return proto_domains
+
 def download_and_parse(source, list_class):
     print(f"Downloading: {source['url']}")
     try:
@@ -229,8 +318,11 @@ def download_and_parse(source, list_class):
         with urllib.request.urlopen(req, timeout=30) as response:
             data = response.read()
         
-        if source['url'].lower().endswith('.json'):
+        url_lower = source['url'].lower()
+        if url_lower.endswith('.json'):
             return source, json.loads(data.decode('utf-8'))
+        elif url_lower.endswith('.lst') or url_lower.endswith('.txt'):
+            return source, data.decode('utf-8')
         else:
             parsed_list = list_class.FromString(data)
             return source, parsed_list
@@ -248,7 +340,9 @@ def process_dat(config, list_class, attr_name):
         if parsed_data is None:
             continue
             
-        if source['url'].lower().endswith('.json'):
+        url_lower = source['url'].lower()
+        
+        if url_lower.endswith('.json'):
             for rule in source['rules']:
                 src_cats = {c.upper() for c in rule['src']}
                 dst_cat = rule['dst'].upper()
@@ -260,8 +354,21 @@ def process_dat(config, list_class, attr_name):
                 elif attr_name == "domain":
                     fetched_domains = parse_json_source_geosite(parsed_data, src_cats)
                     category_items[dst_cat].extend(fetched_domains)
-                    print(f"[BUILDER] Интегрировано {len(fetched_domains)} доменов в категорию {dst_cat} из JSON")
+                    print(f"[BUILDER] Интегрировано {len(fetched_domains)} правил в категорию {dst_cat} из JSON")
         
+        elif url_lower.endswith('.lst') or url_lower.endswith('.txt'):
+            for rule in source['rules']:
+                dst_cat = rule['dst'].upper()
+                
+                if attr_name == "cidr":
+                    fetched_cidrs = parse_lst_source_geoip(parsed_data)
+                    category_items[dst_cat].extend(fetched_cidrs)
+                    print(f"[BUILDER] Интегрировано {len(fetched_cidrs)} IP префиксов в категорию {dst_cat} из LST")
+                elif attr_name == "domain":
+                    fetched_domains = parse_lst_source_geosite(parsed_data)
+                    category_items[dst_cat].extend(fetched_domains)
+                    print(f"[BUILDER] Интегрировано {len(fetched_domains)} правил в категорию {dst_cat} из LST")
+                    
         else:
             for rule in source['rules']:
                 src_cats = {c.upper() for c in rule['src']}
