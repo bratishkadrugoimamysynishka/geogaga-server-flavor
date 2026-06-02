@@ -160,8 +160,40 @@ def parse_json_source_geoip(data, allowed_cats_set):
                     if asn_digits:
                         all_asns.add(asn_digits)
 
+    def fetch_asn(asn):
+        import time  # Импортируем внутри воркера
+        prefixes = []
+        asn_url = f"https://stat.ripe.net/data/announced-prefixes/data.json?resource=AS{asn}"
+        
+        max_retries = 3
+        backoff = 2  # Начальная задержка в секундах
+        
+        for attempt in range(max_retries):
+            try:
+                req = urllib.request.Request(asn_url, headers={'User-Agent': 'Mozilla/5.0'})
+                # Увеличиваем таймаут чтения до 25 секунд
+                with urllib.request.urlopen(req, timeout=25) as resp:
+                    res_data = json.loads(resp.read().decode('utf-8'))
+                    for item in res_data.get("data", {}).get("prefixes", []):
+                        p = item.get("prefix")
+                        if p:
+                            prefixes.append(p)
+                return prefixes  # Успешно получили данные, выходим из цикла ретраев
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    print(f"⚠️ [Retry {attempt + 1}/{max_retries}] AS{asn} ошибка: {e}. Повтор через {backoff} сек...")
+                    time.sleep(backoff)
+                    backoff *= 2  # Увеличиваем паузу в следующий раз (2, 4, ...)
+                else:
+                    print(f"❌ Error fetching AS{asn} after {max_retries} attempts: {e}")
+        return prefixes
+
     if all_asns:
-        all_cidrs.update(fetch_asn_prefixes(all_asns))
+        print(f"[JSON-IP] Найдено {len(all_asns)} ASN для обработки. Резолв через RIPE...")
+        # Снижаем max_workers с 15 до 5, чтобы не спамить API RIPE и не ловить таймауты
+        with ThreadPoolExecutor(max_workers=5) as executor:
+            for chunk in executor.map(fetch_asn, all_asns):
+                all_cidrs.update(chunk)
 
     proto_cidrs = []
     for c_str in all_cidrs:
