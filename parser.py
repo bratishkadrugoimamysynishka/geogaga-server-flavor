@@ -17,6 +17,8 @@ SOURCES = {
     "b4-geoip": "https://github.com/DanielLavrushin/b4geoip/releases/latest/download/geoip.dat"
 }
 
+OUTPUT_DIR = "parser-tmp"  # Базовая директория для всех результатов парсинга
+
 def get_domain_type_str(d_type):
     if d_type == 0: return "keyword"
     if d_type == 1: return "regexp"
@@ -37,7 +39,10 @@ def format_cidr(c):
 
 def process_single_source(folder_name, url):
     print(f"Starting: {folder_name}")
-    os.makedirs(folder_name, exist_ok=True)
+    
+    # Складываем папки результатов строго внутрь базовой директории output
+    target_folder = os.path.join(OUTPUT_DIR, folder_name)
+    os.makedirs(target_folder, exist_ok=True)
     
     # Скачивание файла
     req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
@@ -96,13 +101,13 @@ def process_single_source(folder_name, url):
         type_details = ", ".join([f"{k}: {v}" for k, v in cat_type_counts.items()])
         summary_lines.append(f"- {cat_name}: {elements_count} items ({type_details})")
         
-        # Запись .lst файла
-        lst_path = os.path.join(folder_name, f"{safe_cat_name}.lst")
+        # Запись .lst файла в изолированную директорию
+        lst_path = os.path.join(target_folder, f"{safe_cat_name}.lst")
         with open(lst_path, "w", encoding="utf-8") as f:
             f.write("\n".join(lst_lines) + "\n")
 
-    # Формируем итоговый _summary.txt
-    summary_path = os.path.join(folder_name, "_summary.txt")
+    # Формируем итоговый _summary.txt в изолированной директории
+    summary_path = os.path.join(target_folder, "_summary.txt")
     with open(summary_path, "w", encoding="utf-8") as f:
         f.write(f"=== SUMMARY: {folder_name} ===\n")
         f.write(f"Total categories: {total_categories}\n")
@@ -119,8 +124,6 @@ def process_single_source(folder_name, url):
     print(f"✓ Finished: {folder_name}")
 
 def parse_and_dump_parallel():
-    # Запускаем параллельную обработку. max_workers=5 хватит за глаза, 
-    # чтобы не упереться в лимиты гитхаба по числу одновременных запросов
     with ThreadPoolExecutor(max_workers=5) as executor:
         executor.map(lambda item: process_single_source(*item), SOURCES.items())
 
