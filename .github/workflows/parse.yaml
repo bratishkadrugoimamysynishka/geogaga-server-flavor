@@ -36,7 +36,7 @@ jobs:
           
           # 1. Временно убираем только нужные папки результатов наружу
           mkdir ../tmp_parsed
-          mv client-flavor-geosite/ client-flavor-geoip/ server-flavor-geosite/ server-flavor-geoip/ v2fly-geosite/ Loyalsoldier-geoip/ hydraponique-geosite/ hydraponique-geoip/ runetfreedom-geosite/ runetfreedom-geoip/ ../tmp_parsed/
+          mv * ../tmp_parsed/
           
           # 2. Создаем независимую ветку test
           git checkout --orphan test
