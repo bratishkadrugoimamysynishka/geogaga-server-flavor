@@ -2,7 +2,7 @@ name: Build GeoData
 
 on:
   schedule:
-    - cron: '00 2 * * *'
+    - cron: '00 */6 * * *'
   workflow_dispatch:
 
 permissions:
