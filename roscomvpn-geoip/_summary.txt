@@ -1,0 +1,12 @@
+=== SUMMARY: roscomvpn-geoip ===
+Total categories: 3
+Total elements: 42419
+
+Total elements by data type:
+  IPv4: 42328
+  IPv6: 91
+
+Categories Breakdown:
+- DIRECT: 35692 items (IPv4: 35605, IPv6: 87)
+- PRIVATE: 17 items (IPv4: 13, IPv6: 4)
+- WHITELIST: 6710 items (IPv4: 6710)
